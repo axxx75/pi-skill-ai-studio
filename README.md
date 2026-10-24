@@ -118,6 +118,7 @@ entrano **solo** `openrouter` e `opencode-go`: le altre sessioni sono escluse e 
 | `sessions dir WARN/FALL` | `AI_STUDIO_SESSIONS_DIR` sbagliata o nessuna sessione | usa il default `$HOME/.pi/agent/sessions` |
 | Righe JSONL corrotte | sessione troncata | nessuna azione: sono saltate e contate |
 | `qmd collection ai-studio` assente | collection mai creata | chiedi all'utente il path, poi `qmd collection add` |
+| Skill `ai-studio` duplicata (pacchetto + copia manuale) | pi carica la **prima** trovata e stampa un warning di collisione | rimuovi la copia vecchia: `pi config` → Resources |
 
 ## Privacy
 
