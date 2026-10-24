@@ -191,7 +191,7 @@ function parseSession(fp) {
       const model = (provider && m.model) ? provider + '/' + m.model : (m.model || o.modelId || lastModel || 'unknown');
       if (role === 'user') out.userMsgs++;
       else if (role === 'assistant') out.assistantMsgs++;
-      else if (role === 'tool') out.toolMsgs++;
+      else if (role === 'tool' || role === 'toolResult') out.toolMsgs++;
       const u = m.usage;
       if (u) {
         const tok = u.totalTokens || 0;
@@ -975,9 +975,10 @@ async function showPackages() {
 window.RATE = 0.89;
 function fmtCost(n){ return '€' + ((n||0)*window.RATE).toFixed(4); }
 function fmtEur(n){ return '€' + ((n||0)*window.RATE).toFixed(2); }
-function fmtPer1M(p){ return '€' + ((parseFloat(p)||0)*1e6*window.RATE).toFixed(2); }
+// Un prezzo negativo (es. -1 nel catalogo OpenRouter) significa "variabile": niente numero inventato.
+function fmtPer1M(p){ const v = parseFloat(p); if (!isFinite(v) || v < 0) return 'variabile'; return '€' + (v*1e6*window.RATE).toFixed(2); }
 // I prezzi OpenCode Go sono GIA' per 1M token (OpenRouter invece li da' per token: x1e6).
-function fmtOc(p){ const e = (parseFloat(p)||0)*window.RATE; return '€' + ((e > 0 && e < 0.01) ? e.toFixed(4) : e.toFixed(2)); }
+function fmtOc(p){ const v = parseFloat(p); if (!isFinite(v) || v < 0) return 'variabile'; const e = v*window.RATE; return '€' + ((e > 0 && e < 0.01) ? e.toFixed(4) : e.toFixed(2)); }
 // Quota OpenCode Go: percentuale con barra colorata (verde/giallo/rosso) e data di reset.
 function pctCard(label, pct, reset){
   const v = Number(pct) || 0;

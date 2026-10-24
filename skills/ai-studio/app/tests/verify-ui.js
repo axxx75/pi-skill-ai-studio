@@ -96,7 +96,7 @@ async function main() {
   const routedFetch = (u) => fetch(new URL(String(u), BASE));
   const app = new Function(
     'document', 'window', 'fetch', 'URL', 'Blob', 'console', 'setInterval', 'setTimeout',
-    code + '\nreturn { showStats, showCredits, exportStatsCsv, showFrontier, showModels, switchModelTab };'
+    code + '\nreturn { showStats, showCredits, exportStatsCsv, showFrontier, showModels, switchModelTab, fmtPer1M };'
   )(
     doc,
     { RATE: 0.92, matchMedia: () => ({ matches: false }), addEventListener() {} },
@@ -135,6 +135,10 @@ async function main() {
   check('frontiera: barre renderizzate', (fb.match(/frontier-bar/g) || []).length >= 2, (fb.match(/frontier-bar/g) || []).length + ' barre');
   check('frontiera: listino reale usato', fb.includes('Claude Opus'));
   check('frontiera: spesa reale inclusa', fb.includes('Spesa REALE'));
+  // prezzo -1 nel catalogo OpenRouter = variabile: mai un numero negativo o inventato
+  check('listino: prezzo variabile non numerico', app.fmtPer1M(-1) === 'variabile', app.fmtPer1M(-1));
+  check('listino: prezzo free a zero', app.fmtPer1M(0) === '€0.00', app.fmtPer1M(0));
+  check('listino: prezzo reale convertito', app.fmtPer1M(3e-6).startsWith('€2.6'), app.fmtPer1M(3e-6));
 
   doc.getElementById('content').innerHTML = '';
   try {

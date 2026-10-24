@@ -43,6 +43,14 @@ function seedSessions() {
   };
   write('supported', 'openrouter', 'openai/gpt-5', 1);
   write('unsupported', 'router', 'anonimo', 5);
+  // pi scrive i risultati dei tool con role "toolResult" (non "tool"): deve contare come msg tool
+  const withTool = [
+    { type: 'session', version: 3, id: 'withtool', timestamp: '2026-01-02T10:00:00.000Z', cwd: '/tmp/demo' },
+    { type: 'message', timestamp: '2026-01-02T10:00:01.000Z', message: { role: 'user', content: [{ type: 'text', text: 'ciao' }] } },
+    { type: 'message', timestamp: '2026-01-02T10:00:02.000Z', message: { role: 'assistant', provider: 'openrouter', model: 'openai/gpt-5', usage: { input: 1, output: 1, totalTokens: 2, cost: { total: 0 } }, content: [] } },
+    { type: 'message', timestamp: '2026-01-02T10:00:03.000Z', message: { role: 'toolResult', toolCallId: 't1', toolName: 'bash', isError: false, durationMs: 42, content: [] } },
+  ];
+  fs.writeFileSync(path.join(dir, 'withtool.jsonl'), withTool.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
 
 async function main() {
@@ -82,12 +90,14 @@ async function main() {
     check('server avviato su porta libera', true);
 
     const stats = await (await fetch(base + '/api/stats')).json();
-    check('totali: solo sessioni supportate', stats.summary.sessions === 1, String(stats.summary.sessions));
+    check('totali: solo sessioni supportate', stats.summary.sessions === 2, String(stats.summary.sessions));
     check('totali: costo esclude il provider non supportato', stats.summary.totalCost === 1, String(stats.summary.totalCost));
-    check('totali: token esclusi', stats.summary.totalTokens === 2, String(stats.summary.totalTokens));
+    check('totali: token esclusi', stats.summary.totalTokens === 4, String(stats.summary.totalTokens));
     check('totali: "non supportati" conta la sessione esclusa', stats.summary.unsupportedSessions === 1, String(stats.summary.unsupportedSessions));
     check('byModel: solo provider supportati', stats.byModel.length === 1 && stats.byModel[0].model.startsWith('openrouter/'), JSON.stringify(stats.byModel.map((m) => m.model)));
-    check('tabella sessioni: solo la supportata', stats.sessions.length === 1, String(stats.sessions.length));
+    check('tabella sessioni: solo le supportate', stats.sessions.length === 2, String(stats.sessions.length));
+    check('msg tool: role toolResult contato', stats.summary.toolMsgs === 1, String(stats.summary.toolMsgs));
+    check('msg user: contati', stats.summary.userMsgs === 1, String(stats.summary.userMsgs));
 
     const html = await (await fetch(base + '/')).text();
     check('sidebar: scorciatoia esistente mostrata', html.includes("openScope('existing')"));

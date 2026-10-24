@@ -8,6 +8,17 @@ Crediti OpenRouter/OpenCode Go, Modelli, Collections, Doctor).
 Nessuna dipendenza npm: solo Node.js standard library. Nessun dato lascia la macchina,
 tranne le chiamate alle API dei provider con le chiavi già presenti in `auth.json`.
 
+## Schermate
+
+Dashboard in locale su `http://localhost:8888`, dati **di esempio** (26 sessioni finte, nessun dato reale).
+
+| Stats utilizzo | Metriche | Modelli |
+|---|---|---|
+| ![Stats: riepilogo, per modello, timeline per giorno](skills/ai-studio/assets/stats.png) | ![Metriche: per giorno, per modello, durata per tool](skills/ai-studio/assets/metriche.png) | ![Modelli: listino OpenRouter e OpenCode Go](skills/ai-studio/assets/modelli.png) |
+
+Le schermate sono PNG 1500×1000 generati con Chrome headless sulla dashboard puntata a fixture
+in una dir temporanea (`AI_STUDIO_SESSIONS_DIR` + `AI_STUDIO_STATS_DIR`): nessun dato personale.
+
 ## Requirements
 
 | Componente | Versione / note | Obbligatorio |
@@ -70,7 +81,7 @@ PORT=8899 node skills/ai-studio/app/server.js &
 node skills/ai-studio/app/tests/verify-ui.js --url http://localhost:8899
 ```
 
-`verify-ui.js` non guarda il sorgente: estrae lo `<script>` che il server emette, ne valida
+`verify-ui.js` (35 check) non guarda il sorgente: estrae lo `<script>` che il server emette, ne valida
 la sintassi e lo esegue con un DOM finto e i dati veri delle API. Copre sintassi e runtime
 del render, non CSS/layout.
 
