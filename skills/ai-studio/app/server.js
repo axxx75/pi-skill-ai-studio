@@ -18,7 +18,8 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR || path.join(HOME, '.pi', 'age
 const SESSIONS_DIR = process.env.AI_STUDIO_SESSIONS_DIR || path.join(AGENT_DIR, 'sessions');
 const STATS_DIR = process.env.AI_STUDIO_STATS_DIR || path.join(HOME, '.local', 'share', 'ai-studio', 'stats');
 const CONFIG_FILE = process.env.AI_STUDIO_CONFIG || path.join(HOME, '.config', 'ai-studio', 'config.json');
-const PKG_ROOT = path.join(__dirname, '..');
+// app -> skills/ai-studio -> skills -> radice del pacchetto (se installata da sola, resta la skill dir)
+const PKG_ROOT = path.join(__dirname, '..', '..', '..');
 const SUPPORTED_PROVIDERS = ['openrouter', 'opencode-go'];
 
 // Scorciatoie predefinite. Override (facoltativo) in AI_STUDIO_CONFIG, default
@@ -33,7 +34,7 @@ const DEFAULT_SHORTCUTS = [
   { name: 'pi-docs', label: '📄 PI-docs', root: path.join(HOME, 'PI') },
 ];
 const DEFAULT_QUICKS = [
-  { label: 'AI-studio README', path: path.join(__dirname, '..', 'README.md'), section: 'Quick' },
+  { label: 'AI-studio README', path: path.join(PKG_ROOT, 'README.md'), section: 'Quick' },
   { label: 'MEMORY.md', path: path.join(AGENT_DIR, 'memory', 'MEMORY.md'), section: 'Quick' },
   { label: 'settings.json', path: path.join(AGENT_DIR, 'settings.json'), section: 'Quick' },
   { label: 'SETUP.md', path: path.join(HOME, 'PI', 'ecosystem', 'SETUP.md'), section: 'Quick' },

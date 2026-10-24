@@ -42,26 +42,26 @@ richiesta la riguarda, oppure in modo esplicito con `/skill:ai-studio`.
 La dashboard si avvia a mano (non è un servizio):
 
 ```bash
-node app/server.js            # http://localhost:8888
-PORT=8899 node app/server.js  # porta diversa
+node skills/ai-studio/app/server.js            # http://localhost:8888
+PORT=8899 node skills/ai-studio/app/server.js  # porta diversa
 ```
 
 ## Verify
 
 ```bash
-node --check app/server.js
-node --check app/trace.js
-node app/doctor.js --json                 # exit 1 se un check è FAIL
-bash app/tests/doctor-selftest.sh         # fixture: 3 sessioni finte, nessun dato reale
-node app/tests/test-oc-pricing.js
-node app/tests/test-usage-csv.js
+node --check skills/ai-studio/app/server.js
+node --check skills/ai-studio/app/trace.js
+node skills/ai-studio/app/doctor.js --json                 # exit 1 se un check è FAIL
+bash skills/ai-studio/app/tests/doctor-selftest.sh         # fixture: 3 sessioni finte, nessun dato reale
+node skills/ai-studio/app/tests/test-oc-pricing.js
+node skills/ai-studio/app/tests/test-usage-csv.js
 ```
 
 Verifica della UI (il server deve essere già avviato su una porta):
 
 ```bash
-PORT=8899 node app/server.js &
-node app/tests/verify-ui.js --url http://localhost:8899
+PORT=8899 node skills/ai-studio/app/server.js &
+node skills/ai-studio/app/tests/verify-ui.js --url http://localhost:8899
 ```
 
 `verify-ui.js` non guarda il sorgente: estrae lo `<script>` che il server emette, ne valida
@@ -80,8 +80,8 @@ degradati, solo i `FAIL` fanno uscire 1.
 | *"approfondisci [aspetto] di [tema]"* | espande la sezione, aggiunge la fonte in `fonti/` |
 | *"sintetizza [temi] in una tesi"* | scrive in `sintesi/` con tesi, evidenze, contraddizioni |
 | `qmd query "..." -c ai-studio` | ricerca semantica nello studio |
-| `node app/server.js` | dashboard: Trace, Crediti, Metriche, Stats, Modelli, Collections, Doctor |
-| `node app/doctor.js` | diagnostica: node, auth/provider, catalogo, sessioni, copertura campi, stats dir, porta, righe corrotte |
+| `node skills/ai-studio/app/server.js` | dashboard: Trace, Crediti, Metriche, Stats, Modelli, Collections, Doctor |
+| `node skills/ai-studio/app/doctor.js` | diagnostica: node, auth/provider, catalogo, sessioni, copertura campi, stats dir, porta, righe corrotte |
 
 Variabili (default fra parentesi):
 
@@ -110,8 +110,8 @@ entrano **solo** `openrouter` e `opencode-go`: le altre sessioni sono escluse e 
 
 | Sintomo | Causa | Rimedio |
 |---|---|---|
-| La pagina resta su "Caricamento" | il JS emesso ha un errore | `node app/tests/verify-ui.js --url ...` |
-| `porta libera FAIL` | un'altra istanza ascolta su `PORT` | `PORT=8899 node app/server.js` |
+| La pagina resta su "Caricamento" | il JS emesso ha un errore | `node skills/ai-studio/app/tests/verify-ui.js --url ...` |
+| `porta libera FAIL` | un'altra istanza ascolta su `PORT` | `PORT=8899 node skills/ai-studio/app/server.js` |
 | `auth.json + provider FAIL` | `auth.json` assente o senza i due provider | `pi` → login OpenRouter/OpenCode Go |
 | Crediti OpenRouter in errore | chiave assente o senza permessi | verifica la chiave in `auth.json` |
 | Prezzi frontiera `n/d` | `models-store.json` assente | apri una volta la pagina Modelli in pi o ignora: è opzionale |
