@@ -30,6 +30,12 @@ pi install /percorso/pi-skill-ai-studio
 pi list                                            # deve comparire pi-skill-ai-studio
 ```
 
+Da repository Git (ref pinnato al tag: `pi update --extensions` non lo sposta):
+
+```bash
+pi install git:github.com/Axxx75/pi-skill-ai-studio@v1.0.0
+```
+
 In alternativa, una sola invocazione senza toccare la configurazione:
 
 ```bash
