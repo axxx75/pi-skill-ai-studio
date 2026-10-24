@@ -20,7 +20,11 @@ const STATS_DIR = process.env.AI_STUDIO_STATS_DIR || path.join(HOME, '.local', '
 const CONFIG_FILE = process.env.AI_STUDIO_CONFIG || path.join(HOME, '.config', 'ai-studio', 'config.json');
 // app -> skills/ai-studio -> skills -> radice del pacchetto (se installata da sola, resta la skill dir)
 const PKG_ROOT = path.join(__dirname, '..', '..', '..');
-const SUPPORTED_PROVIDERS = ['openrouter', 'opencode-go'];
+// 'deepseek': record legacy (sessione 01a1560f) con usage senza `provider` dichiarato ->
+// trace.js forma la chiave dal solo modello (che contiene gia' uno slash). Senza qui la
+// sessione finisce in 'non supportati' e i totali Stats perdono ~0.5% (divergenza vs
+// la dashboard storica, rimossa 2026-10-25 su richiesta di Axxx).
+const SUPPORTED_PROVIDERS = ['openrouter', 'opencode-go', 'deepseek'];
 
 // Scorciatoie predefinite. Override (facoltativo) in AI_STUDIO_CONFIG, default
 // ~/.config/ai-studio/config.json: {"shortcuts":[{name,label,root}],"quicks":[{label,path,section}]}.
