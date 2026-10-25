@@ -1000,7 +1000,9 @@ function modelShort(m){ return (m||'').replace(/^~/,'').split('/').pop(); }
 
 // --- Confronto "se avessi usato la frontiera" (intero periodo, token reali) ---
 async function showFrontier() {
-  const d = window._statsData; if (!d) return;
+  // Da Stats i dati sono già in window._statsData; da Metriche (o dopo reload) si rileggono.
+  const d = window._statsData || await api('/api/stats');
+  if (!d || !d.byModel) return;
   let tin = 0, tout = 0, tcr = 0, tcw = 0, real = 0;
   for (const m of (d.byModel || [])) {
     tin += m.input || 0; tout += m.output || 0; tcr += m.cacheRead || 0; tcw += m.cacheWrite || 0; real += m.cost || 0;
@@ -1541,7 +1543,7 @@ async function showMetrics() {
   html += '</tbody></table>';
 
   // per modello
-  html += '<h3 class="section">Per modello</h3><table><thead><tr><th>Modello</th><th class="num">Sess</th><th class="num">Token</th><th class="num">Costo</th></tr></thead><tbody>';
+  html += '<h3 class="section">Per modello <button class="csvbtn" onclick="showFrontier()" title="Spesa reale vs se avessi usato i modelli di frontiera — token reali del periodo × listino locale">🔥 Se avessi usato la frontiera</button></h3><table><thead><tr><th>Modello</th><th class="num">Sess</th><th class="num">Token</th><th class="num">Costo</th></tr></thead><tbody>';
   for (const m of data.byModel) {
     html += '<tr><td><span class="badge model">' + escapeHtml(modelShort(m.model)) + '</span></td><td class="num">' + m.sessions + '</td><td class="num">' + fmtTok(m.tokens) + '</td><td class="num">' + fmtCost(m.cost) + '</td></tr>';
   }

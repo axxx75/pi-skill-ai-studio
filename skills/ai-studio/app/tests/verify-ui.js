@@ -94,12 +94,14 @@ async function main() {
   // 5. esegue il codice emesso con DOM finto e fetch instradato sul server
   const doc = makeDom();
   const routedFetch = (u) => fetch(new URL(String(u), BASE));
+  // handle su window per poterlo manipolare dai check (es. delete win._statsData)
+  const win = { RATE: 0.92, matchMedia: () => ({ matches: false }), addEventListener() {} };
   const app = new Function(
     'document', 'window', 'fetch', 'URL', 'Blob', 'console', 'setInterval', 'setTimeout',
-    code + '\nreturn { showStats, showCredits, exportStatsCsv, showFrontier, showModels, switchModelTab, fmtPer1M };'
+    code + '\nreturn { showStats, showMetrics, showCredits, exportStatsCsv, showFrontier, showModels, switchModelTab, fmtPer1M };'
   )(
     doc,
-    { RATE: 0.92, matchMedia: () => ({ matches: false }), addEventListener() {} },
+    win,
     routedFetch,
     { createObjectURL: () => 'blob:x', revokeObjectURL() {} },
     function BlobStub(parts) { this.parts = parts; },
@@ -135,6 +137,24 @@ async function main() {
   check('frontiera: barre renderizzate', (fb.match(/frontier-bar/g) || []).length >= 2, (fb.match(/frontier-bar/g) || []).length + ' barre');
   check('frontiera: listino reale usato', fb.includes('Claude Opus'));
   check('frontiera: spesa reale inclusa', fb.includes('Spesa REALE'));
+
+  // il bottone esiste anche nella pagina Metriche (sezione "Per modello")
+  doc.getElementById('content').innerHTML = '';
+  try {
+    await app.showMetrics();
+    pass('showMetrics() eseguita senza eccezioni');
+  } catch (e) {
+    fail('showMetrics()', e.message);
+  }
+  check('metriche: bottone frontiera presente', content().includes('showFrontier()'));
+  // senza window._statsData (mai passati da Stats) deve rileggere via /api/stats
+  delete win._statsData;
+  try {
+    await app.showFrontier();
+    pass('showFrontier() da Metriche (con fetch di fallback)');
+  } catch (e) {
+    fail('showFrontier() da Metriche', e.message);
+  }
   // prezzo -1 nel catalogo OpenRouter = variabile: mai un numero negativo o inventato
   check('listino: prezzo variabile non numerico', app.fmtPer1M(-1) === 'variabile', app.fmtPer1M(-1));
   check('listino: prezzo free a zero', app.fmtPer1M(0) === '€0.00', app.fmtPer1M(0));
