@@ -178,13 +178,13 @@ function apiPackages() {
 }
 
 function parseSession(fp) {
-  const out = { file: fp, id: null, workspace: null, start: null, end: null, userMsgs: 0, assistantMsgs: 0, toolMsgs: 0, totalTokens: 0, totalCost: 0, byModel: {}, messages: [] };
+  const out = { file: fp, id: null, parentSession: null, workspace: null, start: null, end: null, userMsgs: 0, assistantMsgs: 0, toolMsgs: 0, totalTokens: 0, totalCost: 0, byModel: {}, messages: [] };
   let lastModel = null;
   const lines = fs.readFileSync(fp, 'utf-8').split('\n');
   for (const line of lines) {
     if (!line.trim()) continue;
     let o; try { o = JSON.parse(line); } catch { continue; }
-    if (o.type === 'session') { out.id = o.id; out.workspace = o.cwd; out.start = o.timestamp; }
+    if (o.type === 'session') { out.id = o.id; out.workspace = o.cwd; out.start = o.timestamp; out.parentSession = o.parentSession || null; }
     if (o.type === 'model_change') { if (o.modelId) lastModel = o.modelId; out.end = out.end || o.timestamp; }
     if (o.type === 'message') {
       const m = o.message || {};
@@ -252,7 +252,7 @@ function apiStats() {
     walk(sessionsDir);
   } catch (e) { return { error: e.message }; }
   sessions.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-  const summary = { sessions: 0, userMsgs: 0, assistantMsgs: 0, toolMsgs: 0, totalTokens: 0, totalCost: 0, firstSession: null, lastSession: null, byDay: {}, unsupportedSessions: 0 };
+  const summary = { sessions: 0, userMsgs: 0, assistantMsgs: 0, toolMsgs: 0, totalTokens: 0, totalCost: 0, subSessions: 0, subTokens: 0, subCost: 0, firstSession: null, lastSession: null, byDay: {}, unsupportedSessions: 0 };
   const byModel = {};
   const supported = (k) => SUPPORTED_PROVIDERS.some(p => k.startsWith(p + '/'));
   const rows = [];
@@ -268,21 +268,31 @@ function apiStats() {
     s.totalCost = totalCost;
     s.byModel = Object.fromEntries(kept);
     rows.push(s);
-    summary.sessions += 1;
-    summary.userMsgs += s.userMsgs;
-    summary.assistantMsgs += s.assistantMsgs;
-    summary.toolMsgs += s.toolMsgs;
+    // Le sessioni subagent non sono sessioni utente: messaggi/turni a parte, costo nei totali.
+    if (s.parentSession) {
+      summary.subSessions += 1;
+      summary.subTokens += s.totalTokens;
+      summary.subCost += s.totalCost;
+    } else {
+      summary.sessions += 1;
+      summary.userMsgs += s.userMsgs;
+      summary.assistantMsgs += s.assistantMsgs;
+      summary.toolMsgs += s.toolMsgs;
+    }
     summary.totalTokens += s.totalTokens;
     summary.totalCost += s.totalCost;
     if (s.start && (!summary.firstSession || s.start < summary.firstSession)) summary.firstSession = s.start;
     if (s.end && (!summary.lastSession || s.end > summary.lastSession)) summary.lastSession = s.end;
     const day = (s.start || '').slice(0, 10);
     if (day) {
-      if (!summary.byDay[day]) summary.byDay[day] = { cost: 0, tokens: 0, msgs: 0, sessions: 0 };
+      if (!summary.byDay[day]) summary.byDay[day] = { cost: 0, tokens: 0, msgs: 0, sessions: 0, subCost: 0 };
       summary.byDay[day].cost += s.totalCost;
       summary.byDay[day].tokens += s.totalTokens;
-      summary.byDay[day].msgs += s.assistantMsgs;
-      summary.byDay[day].sessions += 1;
+      if (s.parentSession) summary.byDay[day].subCost += s.totalCost;
+      else {
+        summary.byDay[day].msgs += s.assistantMsgs;
+        summary.byDay[day].sessions += 1;
+      }
     }
     for (const [model, m] of Object.entries(s.byModel)) {
       if (!byModel[model]) byModel[model] = { msgs: 0, tokens: 0, cost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, sessions: new Set() };
@@ -301,9 +311,9 @@ function apiStats() {
   const byDayArr = Object.entries(summary.byDay).map(([date, d]) => ({ date, ...d })).sort((a, b) => a.date.localeCompare(b.date));
   return {
     ocgo: apiOcLocalUsage(ocPricingCached()),
-    summary: { sessions: summary.sessions, userMsgs: summary.userMsgs, assistantMsgs: summary.assistantMsgs, toolMsgs: summary.toolMsgs, totalTokens: summary.totalTokens, totalCost: summary.totalCost, firstSession: summary.firstSession, lastSession: summary.lastSession, byDay: byDayArr, unsupportedSessions: summary.unsupportedSessions },
+    summary: { sessions: summary.sessions, userMsgs: summary.userMsgs, assistantMsgs: summary.assistantMsgs, toolMsgs: summary.toolMsgs, totalTokens: summary.totalTokens, totalCost: summary.totalCost, subSessions: summary.subSessions, subTokens: summary.subTokens, subCost: summary.subCost, firstSession: summary.firstSession, lastSession: summary.lastSession, byDay: byDayArr, unsupportedSessions: summary.unsupportedSessions },
     byModel: byModelArr,
-    sessions: rows.map(s => ({ file: s.file, id: s.id, workspace: s.workspace, start: s.start, end: s.end, userMsgs: s.userMsgs, assistantMsgs: s.assistantMsgs, toolMsgs: s.toolMsgs, totalTokens: s.totalTokens, totalCost: s.totalCost, byModel: Object.entries(s.byModel).map(([m, v]) => ({ model: m, msgs: v.msgs, tokens: v.tokens, cost: v.cost, input: v.input, output: v.output, cacheRead: v.cacheRead })) }))
+    sessions: rows.filter(s => !s.parentSession).map(s => ({ file: s.file, id: s.id, workspace: s.workspace, start: s.start, end: s.end, userMsgs: s.userMsgs, assistantMsgs: s.assistantMsgs, toolMsgs: s.toolMsgs, totalTokens: s.totalTokens, totalCost: s.totalCost, byModel: Object.entries(s.byModel).map(([m, v]) => ({ model: m, msgs: v.msgs, tokens: v.tokens, cost: v.cost, input: v.input, output: v.output, cacheRead: v.cacheRead })) }))
   };
 }
 
@@ -332,8 +342,22 @@ function apiTraceList() {
   } catch (e) { return { error: e.message, sessions: [] }; }
 }
 
-function apiMetrics() {
-  try { return trace.metrics(SESSIONS_DIR); } catch (e) { return { error: e.message }; }
+// /api/metrics rilegge 190+ JSONL: cache 60s (il dato è storico, non realtime).
+const METRICS_TTL_MS = 60 * 1000;
+let metricsCache = { at: 0, data: null };
+function apiMetrics(force) {
+  const now = Date.now();
+  if (!force && metricsCache.data && (now - metricsCache.at) < METRICS_TTL_MS) {
+    return { ...metricsCache.data, cached: true };
+  }
+  const t0 = Date.now();
+  let data;
+  try { data = trace.metrics(SESSIONS_DIR); } catch (e) { return { error: e.message }; }
+  data.computeMs = Date.now() - t0;
+  data.cachedAt = new Date().toISOString();
+  data.cached = false;
+  metricsCache = { at: Date.now(), data };
+  return data;
 }
 
 function apiCollections() {
@@ -1065,6 +1089,7 @@ function renderStats(data) {
   const s = data.summary;
   let html = '<h3 class="section">Riepilogo</h3><div class="cards">';
   html += card('Sessioni', s.sessions);
+  html += card('di cui subagent', (s.subSessions || 0) + ' sessioni · ' + fmtCost(s.subCost || 0));
   html += card('Msg user', fmtTok(s.userMsgs));
   html += card('Msg assistant', fmtTok(s.assistantMsgs));
   html += card('Msg tool', fmtTok(s.toolMsgs));
@@ -1514,10 +1539,10 @@ function sortModels(k) {
 }
 
 // ===================== METRICS VIEW =====================
-async function showMetrics() {
+async function showMetrics(fresh) {
   document.getElementById('pathbar').innerHTML = '<span class="breadcrumbs">📈 Metriche avanzate (timing tool, costi, alert)</span>';
   document.getElementById('content').innerHTML = '<p>Calcolo metriche su tutte le sessioni…</p>';
-  const data = await api('/api/metrics');
+  const data = await api('/api/metrics' + (fresh ? '?fresh=1' : ''));
   if (data.error) { document.getElementById('content').innerHTML = '<div class="error">' + escapeHtml(data.error) + '</div>'; return; }
 
   // trova durata totale tool (somma totalMs)
@@ -1527,13 +1552,44 @@ async function showMetrics() {
   for (const s of data.subagents) { totSubTokens += s.tokens || 0; totSubCost += s.cost || 0; totSubAgents += s.agents || 0; }
 
   let html = '<h3 class="section">📈 Metriche aggregate</h3><div class="cards">';
-  html += card('Sessioni', data.totals.sessions);
+  html += card('Sessioni utente', data.totals.sessions);
+  html += card('Sessioni subagent', data.totals.subSessions || 0);
   html += card('Token totali', fmtTok(data.totals.tokens));
   html += card('Costo totale', fmtCost(data.totals.cost), 'cost');
+  html += card('di cui subagent', fmtCost(data.totals.subCost || 0));
   html += card('Tempo tool tot', fmtMs(totToolMs));
   html += card('Alert compaction', data.compactionAlerts.length, data.compactionAlerts.length ? 'warn' : '');
   html += card('Subagent calls', data.subagents.reduce((a, s) => a + (s.calls || 0), 0));
   html += '</div>';
+
+  // 🎯 KPI di inferenza — campi già presenti nei JSONL, medie ponderate sui volumi
+  const kp = data.sessionsKpi || [];
+  const sumK = (f) => kp.reduce((a, s) => a + (f(s) || 0), 0);
+  const pctK = (a, b) => (b ? (a / b * 100).toFixed(1) + '%' : '-');
+  const msgAvg = sumK(s => s.assistantMsgs) ? Math.round(sumK(s => s.msgTotalMs) / sumK(s => s.assistantMsgs)) : null;
+  html += '<h3 class="section">🎯 KPI inferenza (solo sessioni utente) <button class="csvbtn" onclick="showMetrics(true)" title="Rilegge tutti i JSONL ignorando la cache di 60s">↻ ricalcola</button></h3><div class="cards">';
+  html += card('Cache hit', pctK(sumK(s => s.cacheRead), sumK(s => s.input) + sumK(s => s.cacheRead)));
+  html += card('Reasoning / output', pctK(sumK(s => s.reasoning), sumK(s => s.output)));
+  html += card('Tool error', pctK(sumK(s => s.toolErrorCount), sumK(s => s.toolCalls)));
+  html += card('Output troncati', sumK(s => s.stopLength), sumK(s => s.stopLength) ? 'warn' : '');
+  html += card('Latenza msg avg', fmtMs(msgAvg));
+  html += card('Compaction', sumK(s => s.compactions));
+  html += '</div>';
+  if (!kp.length) html += '<p style="color:#888">Nessun KPI disponibile.</p>';
+  else {
+    html += '<table><thead><tr><th>Giorno</th><th>Sessione</th><th>Modello</th><th class="num">Turni</th><th class="num">Cache</th><th class="num">Reason</th><th class="num">ToolErr</th><th class="num">Tronc</th><th class="num">Msg avg</th><th class="num">Costo</th></tr></thead><tbody>';
+    for (const s of kp.slice(0, 30)) {
+      html += '<tr><td>' + s.day + '</td><td><code>' + String(s.id || '').slice(0, 8) + '</code></td><td><span class="badge model">' + escapeHtml(modelShort(s.model || '-')) + '</span></td>'
+        + '<td class="num">' + (s.turns || 0) + '</td>'
+        + '<td class="num">' + (s.cacheHitPct == null ? '-' : s.cacheHitPct + '%') + '</td>'
+        + '<td class="num">' + (s.reasoningPct == null ? '-' : s.reasoningPct + '%') + '</td>'
+        + '<td class="num">' + (s.toolErrorPct == null ? '-' : s.toolErrorPct + '%') + '</td>'
+        + '<td class="num">' + (s.stopLength || 0) + '</td>'
+        + '<td class="num">' + fmtMs(s.msgAvgMs) + '</td>'
+        + '<td class="num">' + fmtCost(s.cost) + '</td></tr>';
+    }
+    html += '</tbody></table><p style="color:#8b949e;font-size:11px">Cache = cacheRead/(input+cacheRead). Reason = reasoning/output. Tronc = stopReason "length". Ultime 30 sessioni. Calcolo: ' + (data.computeMs || 0) + 'ms' + (data.cached ? ' (da cache, ' + new Date(data.cachedAt).toLocaleTimeString('it-IT') + ')' : '') + '.</p>';
+  }
 
   // per giorno
   html += '<h3 class="section">Per giorno</h3><table><thead><tr><th>Giorno</th><th class="num">Sess</th><th class="num">Token</th><th class="num">Costo</th><th class="num">Tempo tool</th></tr></thead><tbody>';
@@ -1775,7 +1831,7 @@ async function handler(req, res) {
   }
   if (url.startsWith('/api/metrics')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify(apiMetrics()));
+    return res.end(JSON.stringify(apiMetrics(url.includes('fresh=1'))));
   }
   if (url.startsWith('/api/trace-list')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });

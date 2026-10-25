@@ -81,7 +81,7 @@ async function main() {
   const code = cut > 0 ? inline.slice(0, cut) : inline;
 
   // 4. dataset reale dalle API
-  const apiNames = ['/api/stats', '/api/credits', '/api/credits/history'];
+  const apiNames = ['/api/stats', '/api/credits', '/api/credits/history', '/api/metrics'];
   const data = {};
   for (const name of apiNames) {
     try { data[name] = await (await fetch(new URL(name, BASE))).json(); }
@@ -89,6 +89,14 @@ async function main() {
   }
   const sessions = (data['/api/stats'] || {}).sessions || [];
   check('API /api/stats risponde con sessioni', sessions.length > 0, sessions.length + ' sessioni');
+  const m = data['/api/metrics'] || {};
+  check('API /api/metrics: KPI per sessione', Array.isArray(m.sessionsKpi) && m.sessionsKpi.length > 0, (m.sessionsKpi || []).length + ' sessioni');
+  check('API /api/metrics: cache hit calcolato', m.sessionsKpi && m.sessionsKpi.every(k => k.cacheHitPct === null || (k.cacheHitPct >= 0 && k.cacheHitPct <= 100)));
+  check('API /api/metrics: subagent separati dai totali utente',
+    typeof (m.totals || {}).subSessions === 'number' && (m.totals.sessions + m.totals.subSessions) > 0,
+    JSON.stringify({ user: (m.totals || {}).sessions, sub: (m.totals || {}).subSessions }));
+  const mCached = await (await fetch(new URL('/api/metrics', BASE))).json();
+  check('API /api/metrics: cache attiva alla 2a chiamata', mCached.cached === true, 'cached=' + mCached.cached);
   if (!sessions.length) { console.log('\nSenza sessioni il render non è verificabile.'); process.exit(1); }
 
   // 5. esegue il codice emesso con DOM finto e fetch instradato sul server
@@ -125,6 +133,7 @@ async function main() {
   check('stats: header ordinabili', /sortStats\(\d+\)/.test(h));
   check('stats: bottone CSV', h.includes('exportStatsCsv()'));
   check('stats: bottone frontiera', h.includes('showFrontier()'));
+  check('stats: card di cui subagent', h.includes('di cui subagent'));
 
   // popup frontiera: si apre, carica /api/frontier e renderizza le barre
   try {
@@ -147,6 +156,9 @@ async function main() {
     fail('showMetrics()', e.message);
   }
   check('metriche: bottone frontiera presente', content().includes('showFrontier()'));
+  check('metriche: sezione KPI inferenza', content().includes('KPI inferenza'));
+  check('metriche: colonne KPI sessione', ['Cache', 'Reason', 'ToolErr', 'Msg avg'].every(c => content().includes('>' + c + '<')), 'header KPI');
+  check('metriche: subagent separati', content().includes('Sessioni subagent'));
   // senza window._statsData (mai passati da Stats) deve rileggere via /api/stats
   delete win._statsData;
   try {

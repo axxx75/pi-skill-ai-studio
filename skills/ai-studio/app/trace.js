@@ -62,7 +62,8 @@ function traceFile(fp) {
     file: fp, id: null, cwd: null, version: null, start: null, end: null, hasSession: false, parentSession: null, subagentRuns: [],
     counts: { records: 0, user: 0, assistant: 0, toolResult: 0, system: 0, thinking: 0, toolCalls: 0, compactions: 0, contextEdits: 0, custom: 0 },
     models: [], thinkingChanges: [], toolCalls: [], compactions: [], contextEdits: [], custom: [], events: [], turns: [],
-    usage: { totalTokens: 0, totalCost: 0, byModel: {} },
+    usage: { totalTokens: 0, totalCost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, byModel: {} },
+    stopReasons: {}, latency: { msgs: 0, totalMs: 0 },
   };
 
   let raw;
@@ -152,11 +153,16 @@ function traceFile(fp) {
     if (role === 'assistant') {
       out.counts.assistant++;
       if (currentTurn) { currentTurn.assistantMsgs++; currentTurn.endTs = ts; }
+      if (m.stopReason) out.stopReasons[m.stopReason] = (out.stopReasons[m.stopReason] || 0) + 1;
+      if (typeof m.durationMs === 'number') { out.latency.msgs++; out.latency.totalMs += m.durationMs; }
       const u = m.usage;
       if (u) {
         const tok = u.totalTokens || 0;
         const cost = (u.cost && u.cost.total) || 0;
         out.usage.totalTokens += tok; out.usage.totalCost += cost;
+        out.usage.input += u.input || 0; out.usage.output += u.output || 0;
+        out.usage.cacheRead += u.cacheRead || 0; out.usage.cacheWrite += u.cacheWrite || 0;
+        out.usage.reasoning += u.reasoning || 0;
         const mk = (provider && model) ? provider + '/' + model : (model || 'unknown');
         if (!out.usage.byModel[mk]) out.usage.byModel[mk] = { msgs: 0, tokens: 0, cost: 0, input: 0, output: 0, reasoning: 0 };
         const bm = out.usage.byModel[mk];
@@ -207,6 +213,22 @@ function traceFile(fp) {
   out.toolBreakdown = Object.entries(toolNames).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
   out.usage.byModelArr = Object.entries(out.usage.byModel).map(([model, v]) => ({ model, ...v })).sort((a, b) => b.cost - a.cost);
 
+  // KPI di inferenza: solo campi già presenti nel JSONL, nessuna raccolta aggiuntiva.
+  const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const u = out.usage;
+  const toolErr = out.toolCalls.filter(x => x.isError).length;
+  const toolMs = out.toolCalls.reduce((a, x) => a + (x.durationMs || 0), 0);
+  out.kpi = {
+    userMsgs: out.counts.user, turns: out.turns.length,
+    cacheHitPct: pct(u.cacheRead, u.input + u.cacheRead),
+    reasoningPct: pct(u.reasoning, u.output),
+    toolErrorPct: pct(toolErr, out.toolCalls.length), toolErrorCount: toolErr, toolCalls: out.toolCalls.length,
+    stopLength: out.stopReasons.length || 0, stopError: out.stopReasons.error || 0, stopAborted: out.stopReasons.aborted || 0,
+    msgAvgMs: out.latency.msgs ? Math.round(out.latency.totalMs / out.latency.msgs) : null,
+    toolAvgMs: out.toolCalls.length ? Math.round(toolMs / out.toolCalls.length) : null,
+    compactions: out.counts.compactions, contextEdits: out.counts.contextEdits,
+  };
+
   return out;
 }
 
@@ -224,7 +246,7 @@ function listSessions(dir) {
         try { st = fs.statSync(fp); } catch {}
         const t = traceFile(fp);
         if (t.error || !t.hasSession) continue;
-        sessions.push({ file: fp, dir: path.basename(d), id: t.id, cwd: t.cwd, start: t.start, end: t.end, sizeBytes: st ? st.size : null, counts: t.counts, toolErrors: t.toolCalls.filter(x => x.isError).length, totalTokens: t.usage.totalTokens, totalCost: t.usage.totalCost, models: t.models.map(x => x.modelId).filter(Boolean), toolBreakdown: t.toolBreakdown });
+        sessions.push({ file: fp, dir: path.basename(d), id: t.id, cwd: t.cwd, parentSession: t.parentSession, kpi: t.kpi, start: t.start, end: t.end, sizeBytes: st ? st.size : null, counts: t.counts, toolErrors: t.toolCalls.filter(x => x.isError).length, totalTokens: t.usage.totalTokens, totalCost: t.usage.totalCost, models: t.models.map(x => x.modelId).filter(Boolean), toolBreakdown: t.toolBreakdown });
       }
     }
   };
@@ -254,20 +276,28 @@ function metrics(dir) {
   const compactionAlerts = [];
   const subagents = [];
   const metaByPath = {};      // fp -> { id, cwd, day, calls }
-  const subByParent = {};     // fp padre -> { tokens, cost, turns, agents }
+  const subList = [];         // sessioni figlie (per il rollup dopo il loop)
+  const parentOf = {};        // fp -> parentSession
+  const sessionKpi = [];      // KPI per sessione utente
   const runByParent = {};     // fp padre -> [ run, ... ]
 
   let totalSessions = 0, totalTokens = 0, totalCost = 0;
+  let subSessions = 0, subTokens = 0, subCost = 0, userTokens = 0, userCost = 0;
 
   for (const fp of files.sort()) {
     const t = traceFile(fp);
     if (t.error || !t.hasSession) continue;
-    totalSessions++;
+    const isSub = !!t.parentSession;
     const u = t.usage || {};
     totalTokens += u.totalTokens || 0;
     totalCost += u.totalCost || 0;
+    if (isSub) { subSessions++; subTokens += u.totalTokens || 0; subCost += u.totalCost || 0; }
+    else {
+      totalSessions++; userTokens += u.totalTokens || 0; userCost += u.totalCost || 0;
+    }
 
     const day = (t.start || '').slice(0, 10) || 'unknown';
+    if (!isSub) sessionKpi.push({ id: t.id, day, cwd: t.cwd, model: (t.usage.byModelArr[0] || {}).model || null, tokens: u.totalTokens || 0, cost: +(u.totalCost || 0).toFixed(4), input: u.input || 0, output: u.output || 0, cacheRead: u.cacheRead || 0, reasoning: u.reasoning || 0, assistantMsgs: t.counts.assistant, msgTotalMs: t.latency.totalMs, ...t.kpi });
     if (!byDay[day]) byDay[day] = { sessions: 0, tokens: 0, cost: 0, toolMs: 0 };
     byDay[day].sessions++;
     byDay[day].tokens += u.totalTokens || 0;
@@ -298,17 +328,25 @@ function metrics(dir) {
       compactionAlerts.push({ file: fp, day, id: t.id, cwd: t.cwd, count: t.counts.compactions });
     }
 
-    // subagent: meta del padre (chiamate) e accumulo dei figli via parentSession
+    // subagent: meta del padre (chiamate); i figli si accumulano dopo il loop
     const calls = (t.toolCalls || []).filter(tc => tc.name === 'subagent').length;
+    parentOf[fp] = t.parentSession || null;
     metaByPath[fp] = { id: t.id, cwd: t.cwd, day, calls };
-    if (t.parentSession && fp.includes('/subagent/')) {
-      const agg = subByParent[t.parentSession] || (subByParent[t.parentSession] = { tokens: 0, cost: 0, turns: 0, agents: 0 });
-      agg.tokens += u.totalTokens || 0;
-      agg.cost += u.totalCost || 0;
-      agg.agents++;
-      agg.turns += t.counts.assistant || 0;
-    }
+    if (isSub) subList.push({ fp, parent: t.parentSession, tokens: u.totalTokens || 0, cost: u.totalCost || 0, turns: t.counts.assistant || 0 });
     if (t.subagentRuns && t.subagentRuns.length) (runByParent[fp] = runByParent[fp] || []).push(...t.subagentRuns);
+  }
+
+  // rollup figli -> padre TOP-LEVEL (i subagent annidati risalgono la catena parentSession)
+  const topParent = (fp) => {
+    let p = parentOf[fp], guard = 0;
+    while (p && parentOf[p] && guard++ < 20) p = parentOf[p];
+    return p || null;
+  };
+  const subByParent = {};
+  for (const s of subList) {
+    const top = topParent(s.fp) || s.parent;
+    const agg = subByParent[top] || (subByParent[top] = { tokens: 0, cost: 0, turns: 0, agents: 0 });
+    agg.tokens += s.tokens; agg.cost += s.cost; agg.turns += s.turns; agg.agents++;
   }
 
   // subagent tree: unione padri (chiamate subagent) e padri con sessioni figlie
@@ -339,12 +377,17 @@ function metrics(dir) {
   const byModelArr = Object.entries(byModel).map(([m, v]) => ({ model: m, ...v, cost: +v.cost.toFixed(4) })).sort((a, b) => b.cost - a.cost);
 
   return {
-    totals: { sessions: totalSessions, tokens: totalTokens, cost: +totalCost.toFixed(4) },
+    totals: {
+      sessions: totalSessions, tokens: totalTokens, cost: +totalCost.toFixed(4),
+      userTokens, userCost: +userCost.toFixed(4),
+      subSessions, subTokens, subCost: +subCost.toFixed(4),
+    },
     byDay: byDayArr,
     byModel: byModelArr,
     toolUsage: toolArr,
     compactionAlerts,
     subagents,
+    sessionsKpi: sessionKpi.sort((a, b) => (b.day || '').localeCompare(a.day || '')),
   };
 }
 
@@ -357,6 +400,8 @@ if (require.main === module) {
     console.log('Sessioni trovate: ' + sessions.length + '\n');
     for (const s of sessions) {
       console.log((s.start || '?').slice(0, 16).replace('T', ' ') + '  ' + String(s.id || '').slice(0, 8) + '  ' + String(s.cwd || '').replace(os.homedir(), '~'));
+      const k = s.kpi || {};
+      console.log('    KPI cache=' + (k.cacheHitPct == null ? '-' : k.cacheHitPct + '%') + ' reason=' + (k.reasoningPct == null ? '-' : k.reasoningPct + '%') + ' toolErr=' + (k.toolErrorPct == null ? '-' : k.toolErrorPct + '%') + ' stopLen=' + (k.stopLength || 0) + ' msgAvg=' + (k.msgAvgMs == null ? '-' : k.msgAvgMs + 'ms'));
       console.log('    usr=' + s.counts.user + ' asst=' + s.counts.assistant + ' tool=' + s.counts.toolResult + ' toolCall=' + s.counts.toolCalls + ' think=' + s.counts.thinking + ' compaction=' + s.counts.compactions + ' ctxEdit=' + s.counts.contextEdits + '  tok=' + s.totalTokens.toLocaleString() + '  cost=$' + s.totalCost.toFixed(4));
       if (s.toolBreakdown.length) console.log('    tools: ' + s.toolBreakdown.slice(0, 8).map(t => t.name + ' x' + t.count).join(', '));
       console.log('');

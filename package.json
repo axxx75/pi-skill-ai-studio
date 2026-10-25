@@ -1,6 +1,6 @@
 {
   "name": "pi-skill-ai-studio",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Skill + dashboard locale per pi: metodo di studio AI (temi/fonti/sintesi), analisi sessioni e crediti OpenRouter/OpenCode Go, doctor dell'installazione.",
   "license": "MIT",
   "keywords": [
@@ -9,7 +9,8 @@
   "files": [
     "skills/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "RELEASE_NOTE.md"
   ],
   "pi": {
     "skills": [
