@@ -41,7 +41,7 @@ const DEFAULT_QUICKS = [
   { label: 'AI-studio README', path: path.join(PKG_ROOT, 'README.md'), section: 'Quick' },
   { label: 'MEMORY.md', path: path.join(AGENT_DIR, 'memory', 'MEMORY.md'), section: 'Quick' },
   { label: 'settings.json', path: path.join(AGENT_DIR, 'settings.json'), section: 'Quick' },
-  { label: 'SETUP.md', path: path.join(HOME, 'PI', 'ecosystem', 'SETUP.md'), section: 'Quick' },
+  { label: 'SETUP.md', path: path.join(HOME, 'PI', 'doc_ecosystem', 'SETUP.md'), section: 'Quick' },
   { label: '.bashrc', path: path.join(HOME, '.bashrc'), section: 'Quick' },
   { label: 'Daily logs', path: path.join(AGENT_DIR, 'memory', 'daily'), section: 'Log' },
   { label: 'pi-web-ui log', path: '/tmp/pi-web-ui.log', section: 'Log' },

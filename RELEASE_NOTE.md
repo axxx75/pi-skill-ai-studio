@@ -3,6 +3,15 @@
 Formato: una sezione per versione, dalla più recente. Ogni voce = modifica testata e accettata da Axxx,
 allineata su tre punti (repo locale `~/PI/repos/pi-skill-ai-studio`, checkout installato, GitHub).
 
+## 1.1.1 — 2026-10-28
+
+**Fix: quicks con path morto**
+
+- `app/server.js`: il quick `SETUP.md` puntava a `~/PI/ecosystem/SETUP.md`, path che non esiste più
+  dal riordino della documentazione (`PI/doc_ecosystem/SETUP.md`). La voce veniva scartata in silenzio
+  dal filtro `exists()`: nessun errore, semplicemente il quick non compariva più.
+- Test: `tests/test-*.js` (3/3) e `tests/doctor-selftest.sh` (TUTTI I CHECK OK).
+
 ## 1.1.0 — 2026-10-25
 
 **KPI di inferenza + aggregazione subagent**
